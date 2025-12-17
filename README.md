@@ -52,3 +52,8 @@ For BuddyCompass.
    - `ghcr.io/[owner]/bc-cargo-lambda-with-cache:v1.7.0`
    - `ghcr.io/[owner]/bc-cargo-lambda-with-cache:v1.7`
    - `ghcr.io/[owner]/bc-cargo-lambda-with-cache:v1`
+
+
+## Notes
+
+Although this image could be made a private image, since there are no costs for GitHub's Container registry, it is kept public.
