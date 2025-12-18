@@ -15,8 +15,10 @@ jobs:
         include:
           - platform: linux/amd64
             runner: ubuntu-latest
+            arch: amd64
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
+            arch: arm64
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -42,9 +44,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}}-${{ matrix.arch }}
+            type=semver,pattern={{major}}.{{minor}}-${{ matrix.arch }}
+            type=semver,pattern={{major}}-${{ matrix.arch }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -57,3 +59,44 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+
+  create-manifest:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create and push manifest
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          IMAGE_BASE=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+
+          # Create manifest for full version (e.g., 1.7.0)
+          docker buildx imagetools create -t ${IMAGE_BASE}:${VERSION} \
+            ${IMAGE_BASE}:${VERSION}-amd64 \
+            ${IMAGE_BASE}:${VERSION}-arm64
+
+          # Create manifest for major.minor (e.g., 1.7)
+          MAJOR_MINOR=$(echo $VERSION | cut -d. -f1-2)
+          docker buildx imagetools create -t ${IMAGE_BASE}:${MAJOR_MINOR} \
+            ${IMAGE_BASE}:${VERSION}-amd64 \
+            ${IMAGE_BASE}:${VERSION}-arm64
+
+          # Create manifest for major (e.g., 1)
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          docker buildx imagetools create -t ${IMAGE_BASE}:${MAJOR} \
+            ${IMAGE_BASE}:${VERSION}-amd64 \
+            ${IMAGE_BASE}:${VERSION}-arm64
